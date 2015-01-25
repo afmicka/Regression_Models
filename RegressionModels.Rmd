@@ -1,0 +1,116 @@
+---
+title: "MPG Dependence on Transmission Type"
+author: " by Milica Micic"
+output: 
+    pdf_document:
+        fig_caption: true   
+---
+
+## Executive Summary
+
+We analyse the data that is extracted from the 1974 *Motor Trend US* magazine, containing fuel consumption and 10 aspects of automobile design and performance for 32 automobiles (1973–74 models). To address the question which transmission is better (automatic or manual) in respect to the miles per gallon ratio, we look into different models to find the one that describes this dependence the best. We find with 78% confidence that models with manual transmission always provide better fuel consumption by 1.81 mpg. With 95% confidence we could also claim that models with manual transmission have better mpg ratio by 1.8, but not always given that the 95% confidence interval [-1.06, 4.68] contains zero.
+
+All hidden codes for producing results presented in this report can be found in the Rmd file available on my GitHub account: https://github.com/afmicka/Regression_Models
+
+## Exploratory Data Analysis
+
+In order to explore various relationships between variables, we show in Figure 1 (see Appendix) the pairs plot for `mtcars` dataset. It suggests that most of the variables have a strong correlation with fuel consumption (`mpg`). Latter we address the issue of which correlations are significant. With our main interest being the effect of car transmission type on fuel consumption, we show in Figure 2 (see Appendix) distribution of miles per gallon (`mpg`) for both manual and automatic transmission. It clearly shows that manual transmission provides greater mileage per gallon.  
+
+```{r, echo=FALSE}
+library(datasets)
+data(mtcars)
+```
+
+```{r, echo=FALSE}
+mtcars$cyl <- factor(mtcars$cyl)
+mtcars$vs <- factor(mtcars$vs)
+mtcars$am <- factor(mtcars$am, labels=c("Automatic", "Manual"))
+mtcars$gear <- factor(mtcars$gear)
+mtcars$carb <- factor(mtcars$carb)
+```
+
+## Regression Models
+
+In this section, we start building linear regression models based on the different variables and try to find the best model fit. Given that our main interest is the fuel consumption dependence on transmission type, we start from a simple model that shows how `mpg` changes only between automatic and manual transmission disregarding all other variables in the dataset.
+
+```{r, results='hide'}
+simpleModel <- lm(mpg ~ am, data = mtcars)
+```
+
+This model tells us that mean `mpg` value is 17.15 (intercept in Table 1) for automatic transmission and that the average mileage increases by 7.24 (amManual coefficient) with manual transmission, giving the mean `mpg` value of 24.39 for manual transmission.
+
+```{r, echo=FALSE}
+library(pander)
+pander(simpleModel)
+```
+
+In order to select the best model, we need to find out which variables have the biggest impact on fuel consumption, beside transmission type. We first create the model that uses all variables as predictors 
+
+```{r, results='hide'}
+fullModel <- lm(mpg ~ ., data = mtcars)
+```
+and use “Backward step-wise regression”, starting from this model, to remove those variables that are not statistically significant and create the model that best fits the data.
+```{r, results='hide'}
+bestModel <- step(fullModel)
+```
+
+```{r, echo=FALSE, results='hide'}
+pander(bestModel)
+```
+The model for 'best fit' tells us that the number of cylinders (`cyl`), weight (`wt`), horsepower (`hp`) and transmission (`am`) are the relevant variables to fit `mpg`, with 84% of the variability explained by this model. It also suggests that manual transmission provides greater `mpg` ratio by 1.8 in comparison to automatic transmission, keeping all other relevant variables constant. Comparing these three models - best to simple and full to best - with `anova()` function: 
+```{r, echo=TRUE, results='hide'}
+anova(simpleModel, bestModel, fullModel)
+```
+we find that there is a very significant difference between the best and the simplest model (see Table 2). p-value is very small meaning that variables added in the best model are important. On the other hand, high p-value for F-statistics in the third row of the table shows that adding more variables to the best model does not change anything and it would be redundant to use model with all variables as predictors.
+
+```{r, echo=FALSE}
+pander(anova(simpleModel, bestModel, fullModel)[2:3,], caption="Model comparison between simple and best model (first row), and best and full model (second row)")
+```
+
+## Residuals and Diagnostics
+
+In Figure 3 (see Appendix) we show the diagnostic of residuals for our regression (best) model. Residuals versus fitted plot and scale-location plot show no pattern confirming the variable independence in our model. Normal Q-Q plot indicate that residuals are approximately normally distributed. Residuals versus leverage plot indicates that there might be some leverage points influencing coefficients. Looking into the absolute `dfbeta` values that are indicators of the change in the slope coefficients when the observation is removed, we find that there are no values greater than 1. This means that there is no car model whose exclusion would greatly influence our regression model, including the ones labeled in Figure 3 that have the greatest `dfbeta` values. The points with highest hatvalues are Maserati Bora (hatvalue = 0.471), Lincoln Continental (hatvalue = 0.294), and Toyota Corona (hatvalue = 0.278). However, these values are smaller than 1, suggesting that there is no reason for removing these observations from the dataset.
+```{r, echo=FALSE, results='hide'}
+## car models with highest dfbeta values
+head(sort(dfbetas(bestModel)[,6], decreasing=TRUE),3)
+```
+```{r dfbetas, echo=FALSE, results="hide"}
+## dfbeta values for all car models
+abs(dfbetas(bestModel))
+``` 
+
+```{r, echo=FALSE, results='hide'}
+## hatvalues for all car models
+head(sort(hatvalues(bestModel), decreasing=TRUE),3)
+```
+
+## Statistical Uncertainty
+
+The uncertainty in the conclusion that MPG is better with manual transmission can be quantified
+by calculating the 95 % confidence interval for our intercept of 1.81 MPG. We get that this interval around 1.8 MPG is [-1.06, 4.68]. However, it contains zero suggesting that it is possible that in some cases automatic transmission has better `mpg` than manual. In order to avoid this uncertainty, we look for the interval that does not contain zero ensuring that the manual transmission would always have better `mpg` than automatic, but with smaller confidence percentage. We find this to be 78% confidence interval [0.05, 3.56].
+
+```{r, echo=FALSE, results='hide'}
+# 95% confidence interval
+  sumCoef <- summary(bestModel)$coefficients
+  sumCoef[6,1] + c(-1,1) * qt(.975, df=bestModel$df) * sumCoef[6,2]
+```
+
+```{r, echo=FALSE, results='hide'}
+# 78% confidence interval
+  sumCoef[6,1] + c(-1,1) * qt(.89, df=bestModel$df) * sumCoef[6,2]
+``` 
+
+## Appendix
+
+```{r, echo=FALSE, fig.height=6 , fig.cap="Pairs plot for 'mtcars' dataset."}
+pairs(mpg~., mtcars, panel=panel.smooth, pch=46)
+```
+
+```{r, echo=FALSE, fig.height=6, fig.cap="The distirbution of miles per gallon (mpg) for automatic (left) and manual (right) transmission."}
+boxplot(mpg ~ am, data=mtcars, xlab = "Transmission type", ylab = "MPG [miles per gallon]")
+```
+
+```{r, echo=FALSE, fig.height=7, fig.cap="The diagnostic of residuals"}
+par(mfrow = c(2, 2))
+plot(bestModel, cex=0.7)
+```
